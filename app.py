@@ -29,23 +29,25 @@ def get_headline_metrics():
     conn = get_connection()
     cur = conn.cursor()
     cur.execute("""
-        WITH monthly AS (
+        SELECT order_month, revenue, orders, items_sold,
+               ROUND(revenue / NULLIF(orders, 0), 2) AS aov
+        FROM (
             SELECT
                 DATE_TRUNC('month', TO_TIMESTAMP(created_at, 9)) AS order_month,
                 SUM(price_usd)           AS revenue,
                 COUNT(DISTINCT order_id) AS orders,
                 SUM(items_purchased)     AS items_sold
             FROM orders
-            WHERE TO_TIMESTAMP(created_at, 9) >= DATEADD('month', -2, DATE_TRUNC('month', CURRENT_DATE))
-              AND TO_TIMESTAMP(created_at, 9) <  DATE_TRUNC('month', CURRENT_DATE)
             GROUP BY 1
-        )
-        SELECT order_month, revenue, orders, items_sold,
-               ROUND(revenue / NULLIF(orders, 0), 2) AS aov
-        FROM monthly
-        ORDER BY order_month
+            ORDER BY order_month DESC
+            LIMIT 2
+        ) sub
+        ORDER BY order_month ASC
     """)
     rows = cur.fetchall()
+    if len(rows) < 2:
+        st.error("Need at least two months of order data to display headline metrics.")
+        st.stop()
     prior, current = rows[0], rows[1]
     return {
         "month": current[0].strftime("%B %Y"),
